@@ -2,135 +2,135 @@
   "pluginAlias": "xiaomifan",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Homebridge plugin for Xiaomi Fans",
-  "footerDisplay": "For a detailed description, see the [README](https://github.com/merdok/homebridge-xiaomi-fan#platform-configuration-fields)",
+  "headerDisplay": "Xiaomi 선풍기를 위한 Homebridge 플러그인 (Homebridge 2.0 호환 fork)",
+  "footerDisplay": "자세한 설명은 [README](https://github.com/Km81/homebridge-xiaomi-fan-km81#설정-항목) 를 참고하세요.",
   "schema": {
     "devices": {
-      "title": "Devices",
+      "title": "장치 목록",
       "type": "array",
       "required": true,
       "items": {
         "type": "object",
         "properties": {
           "name": {
-            "title": "Name",
-            "description": "The name of your fan.",
+            "title": "이름",
+            "description": "선풍기의 이름입니다. HomeKit에 표시되는 액세서리 이름이 됩니다.",
             "type": "string",
-            "default": "My Xiaomi Fan",
+            "default": "내 샤오미 선풍기",
             "minLength": 1,
             "required": true
           },
           "ip": {
-            "title": "Fan ip address",
-            "description": "The ip address of your fan.",
+            "title": "IP 주소",
+            "description": "선풍기의 IP 주소입니다.",
             "type": "string",
             "format": "ipv4",
             "required": true
           },
           "token": {
-            "title": "Fan device token",
-            "description": "The token of your fan.",
+            "title": "장치 토큰",
+            "description": "선풍기의 device token 입니다. 추출 방법은 README의 토큰 안내를 참고하세요.",
             "type": "string",
             "required": true
           },
           "deviceId": {
-            "title": "Fan device id",
-            "description": "The device id of your fan.",
+            "title": "장치 ID (선택)",
+            "description": "miot 프로토콜을 사용하는 신형 선풍기는 device id가 필요합니다. 보통은 자동으로 가져오지만, 인식이 안 될 경우 수동으로 입력할 수 있습니다.",
             "type": "string",
             "required": false
           },
           "model": {
-            "title": "The fan model",
-            "description": "The model of your fan. If specified then the accessory will be created instantly without the need to first discover and identify the fan.",
+            "title": "선풍기 모델 (선택)",
+            "description": "선풍기 모델명을 직접 지정합니다. 지정하면 별도의 디스커버리 과정 없이 즉시 액세서리가 생성됩니다. 예: dmaker.fan.p11",
             "type": "string",
             "required": false
           },
           "prefsDir": {
-            "title": "Prefs directory",
-            "description": "The location where to store fan information. Default is: ~/.homebridge/.xiaomiFan",
+            "title": "설정 저장 폴더 (선택)",
+            "description": "선풍기 정보가 저장되는 폴더 경로입니다. 기본값: ~/.homebridge/.xiaomiFan",
             "type": "string",
             "required": false
           },
           "pollingInterval": {
-            "title": "Background polling interval",
-            "description": "How often to check the status of the fan in seconds.",
+            "title": "상태 폴링 간격 (초)",
+            "description": "선풍기 상태를 백그라운드에서 얼마나 자주 확인할지 초 단위로 지정합니다. 기본값: 5",
             "type": "number",
             "default": 5,
             "required": false
           },
           "deepDebugLog": {
-            "title": "Enable deep debug log",
-            "description": "Enables additional more detailed debug log. Useful when trying to figure out issues with the plugin.",
+            "title": "상세 디버그 로그 사용",
+            "description": "더 자세한 디버그 로그를 출력합니다. 플러그인 문제를 분석할 때 유용합니다.",
             "type": "boolean"
           },
           "buzzerControl": {
-            "title": "Buzzer control service",
-            "description": "Whether to show buzzer control buttons.",
+            "title": "부저(소리) 제어 사용",
+            "description": "부저 켜기/끄기 버튼을 표시합니다. Smartmi 계열에서는 회전 방향 스위치로 큰 소리/작은 소리를 선택할 수 있습니다.",
             "type": "boolean",
             "default": true,
             "required": false
           },
           "ledControl": {
-            "title": "Led control service",
-            "description": "Whether to show led control buttons.",
+            "title": "LED 제어 사용",
+            "description": "선풍기 LED 켜기/끄기 버튼을 표시합니다.",
             "type": "boolean",
             "default": true,
             "required": false
           },
           "naturalModeControl": {
-            "title": "Natural mode control service",
-            "description": "Whether to show a switch which allows to quickly enable/disable the natural mode. Only on supported devices!",
+            "title": "자연풍 모드 제어 사용",
+            "description": "자연풍(Natural) 모드를 빠르게 켜고 끌 수 있는 스위치를 표시합니다. 지원 모델에서만 동작합니다.",
             "type": "boolean",
             "default": true,
             "required": false
           },
           "sleepModeControl": {
-            "title": "Sleep mode control service",
-            "description": "Whether to show a switch which allows to quickly enable/disable the sleep mode. Only on supported devices!",
+            "title": "수면 모드 제어 사용",
+            "description": "수면(Sleep) 모드를 빠르게 켜고 끌 수 있는 스위치를 표시합니다. 지원 모델에서만 동작합니다.",
             "type": "boolean",
             "default": true,
             "required": false
           },
           "moveControl": {
-            "title": "Move control service",
-            "description": "Whether to show switches which allows to move the fan left or right. Only on supported devices!",
+            "title": "좌/우 이동 제어 사용",
+            "description": "선풍기 머리를 좌우로 5° 씩 움직일 수 있는 스위치를 표시합니다. 지원 모델에서만 동작합니다.",
             "type": "boolean",
             "default": false,
             "required": false
           },
           "shutdownTimer": {
-            "title": "Shutdown timer service",
-            "description": "Show a slider (light bulb) to control the auto shutdown timer.",
+            "title": "꺼짐 예약 타이머 사용",
+            "description": "자동 꺼짐 시간을 분 단위로 설정할 수 있는 슬라이더(전구 형태)를 표시합니다.",
             "type": "boolean",
             "default": false,
             "required": false
           },
           "angleButtons": {
-            "title": "Angle buttons",
-            "description": "Allows to create buttons that can switch between oscillation angles. Only on supported devices!",
+            "title": "회전 각도 버튼",
+            "description": "회전 각도를 전환할 수 있는 버튼을 만듭니다. 지원하는 각도 값은 모델마다 다릅니다. 활성화된 각도 버튼을 다시 누르면 회전이 꺼집니다.",
             "type": "array",
             "items": {
               "type": "integer"
             }
           },
           "verticalAngleButtons": {
-            "title": "Vertical angle buttons",
-            "description": "Allows to create buttons that can switch between vertical oscillation angles. Only on supported devices!",
+            "title": "수직 회전 각도 버튼",
+            "description": "수직(상하) 회전 각도를 전환할 수 있는 버튼을 만듭니다. 지원 모델에서만 동작합니다. 활성화된 버튼을 다시 누르면 수직 회전이 꺼집니다.",
             "type": "array",
             "items": {
               "type": "integer"
             }
           },
           "ioniserControl": {
-            "title": "Ioniser control service",
-            "description": "Show a switch which allows to quickly enable/disable the ioniser on your fan. Only on supported devices!",
+            "title": "이온 발생기 제어 사용",
+            "description": "이온 발생기(Ioniser)를 켜고 끌 수 있는 스위치를 표시합니다. 지원 모델에서만 동작합니다.",
             "type": "boolean",
             "default": false,
             "required": false
           },
           "fanLevelControl": {
-            "title": "Fan level service",
-            "description": "Show fan level switches which allow to change the fan level. Only on supported devices!",
+            "title": "풍량 단계 스위치 사용",
+            "description": "풍량 단계를 변경할 수 있는 스위치를 표시합니다. 지원 모델에서만 동작합니다.",
             "type": "boolean",
             "required": false
           }
