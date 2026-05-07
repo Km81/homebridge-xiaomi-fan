@@ -4,9 +4,9 @@ const Events = require('./lib/Events.js');
 
 let Service, Characteristic, Homebridge, Accessory;
 
-const PLUGIN_NAME = 'homebridge-xiaomi-fan';
+const PLUGIN_NAME = 'homebridge-xiaomi-fan-km81';
 const PLATFORM_NAME = 'xiaomifan';
-const PLUGIN_VERSION = '2.0.0';
+const PLUGIN_VERSION = '1.0.0';
 
 // General constants
 const BATTERY_LOW_THRESHOLD = 20;
