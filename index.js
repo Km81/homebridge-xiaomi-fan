@@ -6,7 +6,7 @@ let Service, Characteristic, Homebridge, Accessory;
 
 const PLUGIN_NAME = 'homebridge-xiaomi-fan-km81';
 const PLATFORM_NAME = 'xiaomifan';
-const PLUGIN_VERSION = '1.0.0';
+const PLUGIN_VERSION = '1.2.0';
 
 // General constants
 const BATTERY_LOW_THRESHOLD = 20;
@@ -21,9 +21,11 @@ module.exports = function(homebridge) {
 };
 
 class xiaomiFanDevice {
-  constructor(log, config, api) {
+  constructor(log, config, api, cachedAccessory, platform) {
     this.log = log;
     this.api = api;
+    this.cachedAccessory = cachedAccessory; // 캐시된 액세서리 (있으면 재사용)
+    this.platform = platform; // 부모 플랫폼 참조
 
     // check if we have mandatory device info
     try {
@@ -155,15 +157,49 @@ class xiaomiFanDevice {
     // generate uuid
     this.UUID = Homebridge.hap.uuid.generate(this.token + this.ip + PLATFORM_NAME);
 
-    // prepare the fan accessory
-    this.fanAccesory = new Accessory(this.name, this.UUID, Homebridge.hap.Categories.FAN);
+    // 캐시된 액세서리가 있으면 재사용 (사용자가 변경한 ConfiguredName 보존됨)
+    if (this.cachedAccessory) {
+      this.fanAccesory = this.cachedAccessory;
+      this.logDebug(`캐시된 액세서리 재사용: ${this.fanAccesory.displayName}`);
+    } else {
+      // 새 액세서리 생성 및 등록
+      this.fanAccesory = new Accessory(this.name, this.UUID, Homebridge.hap.Categories.FAN);
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [this.fanAccesory]);
+      if (this.platform) {
+        this.platform.fans.push(this.fanAccesory);
+      }
+      this.logDebug(`새 액세서리 등록: ${this.name}`);
+    }
 
     // prepare accessory services
     if (this.fanDevice) {
       this.setupAccessoryServices();
     }
+  }
 
-    this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [this.fanAccesory]);
+  /**
+   * Helper: 서비스를 가져오거나 새로 만든다.
+   * 기존 서비스가 있으면 재사용하여 사용자가 Home 앱에서 변경한 ConfiguredName 등의 값을 보존.
+   * - Name: 매번 plugin 기본 이름으로 설정 (HomeKit fallback용)
+   * - ConfiguredName: 처음 한 번만 기본 이름으로 설정하고, 이후엔 사용자 변경값 유지
+   */
+  getOrCreateService(ServiceClass, displayName, subType) {
+    let service = this.fanAccesory.getServiceById(ServiceClass, subType);
+    if (!service) {
+      service = new ServiceClass(displayName, subType);
+      this.fanAccesory.addService(service);
+    }
+
+    // Name characteristic 명시적 설정 (ConfiguredName이 비어있을 때 fallback)
+    service.setCharacteristic(Characteristic.Name, displayName);
+
+    // ConfiguredName characteristic 추가 (없을 때만 초기값 설정 → 사용자 변경값 보존)
+    if (!service.testCharacteristic(Characteristic.ConfiguredName)) {
+      service.addCharacteristic(Characteristic.ConfiguredName);
+      service.setCharacteristic(Characteristic.ConfiguredName, displayName);
+    }
+
+    return service;
   }
 
   setupAccessoryServices() {
@@ -190,57 +226,73 @@ class xiaomiFanDevice {
   }
 
   updateInformationService() {
-    // remove the preconstructed information service, since i will be adding my own
-    this.fanAccesory.removeService(this.fanAccesory.getService(Service.AccessoryInformation));
+    // AccessoryInformation은 액세서리에 기본 포함되므로 가져와서 재사용
+    let infoService = this.fanAccesory.getService(Service.AccessoryInformation);
+    if (!infoService) {
+      infoService = this.fanAccesory.addService(Service.AccessoryInformation);
+    }
 
     let fanModel = this.fanDevice.getFanModel() || 'Unknown';
     let fanDeviceId = this.fanDevice.getDeviceId() || 'Unknown';
 
-    this.informationService = new Service.AccessoryInformation();
-    this.informationService
-      .setCharacteristic(Characteristic.Name, this.name)
+    infoService
       .setCharacteristic(Characteristic.Manufacturer, 'Xiaomi')
       .setCharacteristic(Characteristic.Model, fanModel)
       .setCharacteristic(Characteristic.SerialNumber, fanDeviceId)
       .setCharacteristic(Characteristic.FirmwareRevision, PLUGIN_VERSION);
 
-    this.fanAccesory.addService(this.informationService);
+    this.informationService = infoService;
   }
 
   prepareFanService() {
-    this.fanService = new Service.Fanv2(this.name, 'fanService');
+    this.fanService = this.getOrCreateService(Service.Fanv2, this.name, 'fanService');
+
+    // 핸들러 바인딩 (매번 다시 설정해도 .onGet/.onSet은 덮어쓰므로 안전)
     this.fanService
       .getCharacteristic(Characteristic.Active)
       .onGet(this.getPowerState.bind(this))
       .onSet(this.setPowerState.bind(this));
-    this.fanService
-      .addCharacteristic(Characteristic.CurrentFanState)
+
+    if (!this.fanService.testCharacteristic(Characteristic.CurrentFanState)) {
+      this.fanService.addCharacteristic(Characteristic.CurrentFanState);
+    }
+    this.fanService.getCharacteristic(Characteristic.CurrentFanState)
       .onGet(this.getFanState.bind(this));
+
     if (this.fanDevice.supportsFanSpeed()) {
-      this.fanService
-        .addCharacteristic(Characteristic.RotationSpeed)
+      if (!this.fanService.testCharacteristic(Characteristic.RotationSpeed)) {
+        this.fanService.addCharacteristic(Characteristic.RotationSpeed);
+      }
+      this.fanService.getCharacteristic(Characteristic.RotationSpeed)
         .onGet(this.getRotationSpeed.bind(this))
         .onSet(this.setRotationSpeed.bind(this));
     }
-    this.fanService
-      .addCharacteristic(Characteristic.LockPhysicalControls)
-      .onGet(this.getLockPhysicalControls.bind(this))
-      .onSet(this.setLockPhysicalControls.bind(this));
-    this.fanService
-      .addCharacteristic(Characteristic.SwingMode)
+
+    // 어린이 보호용 잠금장치(LockPhysicalControls)는 의도적으로 제거함
+    // - HomeKit Home 앱에서 불필요하게 노출되어 UI를 복잡하게 만듬
+
+    if (!this.fanService.testCharacteristic(Characteristic.SwingMode)) {
+      this.fanService.addCharacteristic(Characteristic.SwingMode);
+    }
+    this.fanService.getCharacteristic(Characteristic.SwingMode)
       .onGet(this.getSwingMode.bind(this))
       .onSet(this.setSwingMode.bind(this));
-    this.fanService
-      .addCharacteristic(Characteristic.RotationDirection) // used to switch between buzzer levels on supported devices
-      .onGet(this.getRotationDirection.bind(this))
-      .onSet(this.setRotationDirection.bind(this));
 
-    this.fanAccesory.addService(this.fanService);
+    // RotationDirection은 자연풍/일반풍 전환 토글로 재활용
+    // (Home 앱의 회전 방향 아이콘이 자연풍 모드 토글로 동작)
+    if (this.fanDevice.supportsNaturalMode()) {
+      if (!this.fanService.testCharacteristic(Characteristic.RotationDirection)) {
+        this.fanService.addCharacteristic(Characteristic.RotationDirection);
+      }
+      this.fanService.getCharacteristic(Characteristic.RotationDirection)
+        .onGet(this.getRotationDirection.bind(this))
+        .onSet(this.setRotationDirection.bind(this));
+    }
   }
 
   prepareMoveControlService() {
     if (this.moveControl && this.fanDevice.supportsLeftRightMove()) {
-      this.moveLeftService = new Service.Switch('Move left', 'moveLeftService');
+      this.moveLeftService = this.getOrCreateService(Service.Switch, 'Move left', 'moveLeftService');
       this.moveLeftService
         .getCharacteristic(Characteristic.On)
         .onGet(this.getMoveFanSwitch.bind(this))
@@ -248,21 +300,17 @@ class xiaomiFanDevice {
           return this.setMoveFanSwitch(state, 'left');
         });
 
-      this.fanAccesory.addService(this.moveLeftService);
-
-      this.moveRightService = new Service.Switch('Move right', 'moveRightService');
+      this.moveRightService = this.getOrCreateService(Service.Switch, 'Move right', 'moveRightService');
       this.moveRightService
         .getCharacteristic(Characteristic.On)
         .onGet(this.getMoveFanSwitch.bind(this))
         .onSet((state) => {
           return this.setMoveFanSwitch(state, 'right');
         });
-
-      this.fanAccesory.addService(this.moveRightService);
     }
 
     if (this.moveControl && this.fanDevice.supportsUpDownMove()) {
-      this.moveUpService = new Service.Switch('Move Up', 'moveUpService');
+      this.moveUpService = this.getOrCreateService(Service.Switch, 'Move Up', 'moveUpService');
       this.moveUpService
         .getCharacteristic(Characteristic.On)
         .onGet(this.getMoveFanSwitch.bind(this))
@@ -270,29 +318,23 @@ class xiaomiFanDevice {
           return this.setMoveFanSwitch(state, 'up');
         });
 
-      this.fanAccesory.addService(this.moveUpService);
-
-      this.moveDownService = new Service.Switch('Move down', 'moveDownService');
+      this.moveDownService = this.getOrCreateService(Service.Switch, 'Move down', 'moveDownService');
       this.moveDownService
         .getCharacteristic(Characteristic.On)
         .onGet(this.getMoveFanSwitch.bind(this))
         .onSet((state) => {
           return this.setMoveFanSwitch(state, 'down');
         });
-
-      this.fanAccesory.addService(this.moveDownService);
     }
   }
 
   prepareBuzzerControlService() {
     if (this.buzzerControl && this.fanDevice.supportsBuzzerControl()) {
-      this.buzzerService = new Service.Switch('Buzzer', 'buzzerService');
+      this.buzzerService = this.getOrCreateService(Service.Switch, 'Buzzer', 'buzzerService');
       this.buzzerService
         .getCharacteristic(Characteristic.On)
         .onGet(this.getBuzzer.bind(this))
         .onSet(this.setBuzzer.bind(this));
-
-      this.fanAccesory.addService(this.buzzerService);
     }
   }
 
@@ -300,67 +342,63 @@ class xiaomiFanDevice {
     if (this.ledControl && this.fanDevice.supportsLedControl()) {
       if (this.fanDevice.supportsLedBrightness()) {
         // if brightness supported then add a lightbulb for controlling
-        this.ledBrightnessService = new Service.Lightbulb('LED', 'ledBrightnessService');
+        this.ledBrightnessService = this.getOrCreateService(Service.Lightbulb, 'LED', 'ledBrightnessService');
         this.ledBrightnessService
           .getCharacteristic(Characteristic.On)
           .onGet(this.getLed.bind(this))
           .onSet(this.setLed.bind(this));
-        this.ledBrightnessService
-          .addCharacteristic(Characteristic.Brightness)
+
+        if (!this.ledBrightnessService.testCharacteristic(Characteristic.Brightness)) {
+          this.ledBrightnessService.addCharacteristic(Characteristic.Brightness);
+        }
+        this.ledBrightnessService.getCharacteristic(Characteristic.Brightness)
           .onGet(this.getLedBrightness.bind(this))
           .onSet(this.setLedBrightness.bind(this));
-
-        this.fanAccesory.addService(this.ledBrightnessService);
       } else if (this.fanDevice.supportsLedControl()) {
         // if not then just a simple switch
-        this.ledService = new Service.Switch('LED', 'ledService');
+        this.ledService = this.getOrCreateService(Service.Switch, 'LED', 'ledService');
         this.ledService
           .getCharacteristic(Characteristic.On)
           .onGet(this.getLed.bind(this))
           .onSet(this.setLed.bind(this));
-
-        this.fanAccesory.addService(this.ledService);
       }
     }
   }
 
   prepareNaturalModeControlService() {
     if (this.naturalModeControl && this.fanDevice.supportsNaturalMode()) {
-      this.naturalModeControlService = new Service.Switch('Natural mode', 'naturalModeControlService');
+      this.naturalModeControlService = this.getOrCreateService(Service.Switch, 'Natural mode', 'naturalModeControlService');
       this.naturalModeControlService
         .getCharacteristic(Characteristic.On)
         .onGet(this.getNaturalMode.bind(this))
         .onSet(this.setNaturalMode.bind(this));
-
-      this.fanAccesory.addService(this.naturalModeControlService);
     }
   }
 
   prepareSleepModeControlService() {
     if (this.sleepModeControl && this.fanDevice.supportsSleepMode()) {
-      this.sleepModeControlService = new Service.Switch('Sleep mode', 'sleepModeControlService');
+      this.sleepModeControlService = this.getOrCreateService(Service.Switch, 'Sleep mode', 'sleepModeControlService');
       this.sleepModeControlService
         .getCharacteristic(Characteristic.On)
         .onGet(this.getSleepMode.bind(this))
         .onSet(this.setSleepMode.bind(this));
-
-      this.fanAccesory.addService(this.sleepModeControlService);
     }
   }
 
   prepareShutdownTimerService() {
     if (this.shutdownTimer && this.fanDevice.supportsPowerOffTimer()) {
-      this.shutdownTimerService = new Service.Lightbulb('Shutdown timer', 'shutdownTimerService');
+      this.shutdownTimerService = this.getOrCreateService(Service.Lightbulb, 'Shutdown timer', 'shutdownTimerService');
       this.shutdownTimerService
         .getCharacteristic(Characteristic.On)
         .onGet(this.getShutdownTimerEnabled.bind(this))
         .onSet(this.setShutdownTimerEnabled.bind(this));
-      this.shutdownTimerService
-        .addCharacteristic(Characteristic.Brightness)
+
+      if (!this.shutdownTimerService.testCharacteristic(Characteristic.Brightness)) {
+        this.shutdownTimerService.addCharacteristic(Characteristic.Brightness);
+      }
+      this.shutdownTimerService.getCharacteristic(Characteristic.Brightness)
         .onGet(this.getShutdownTimer.bind(this))
         .onSet(this.setShutdownTimer.bind(this));
-
-      this.fanAccesory.addService(this.shutdownTimerService);
     }
   }
 
@@ -396,7 +434,8 @@ class xiaomiFanDevice {
       }
 
       this.angleButtons[i] = parsedValue;
-      let tmpAngleButton = new Service.Switch('Angle - ' + parsedValue, 'angleButtonService' + i);
+      const angleName = 'Angle - ' + parsedValue;
+      let tmpAngleButton = this.getOrCreateService(Service.Switch, angleName, 'angleButtonService' + i);
       tmpAngleButton
         .getCharacteristic(Characteristic.On)
         .onGet(() => {
@@ -406,7 +445,6 @@ class xiaomiFanDevice {
           return this.setAngleButtonState(state, parsedValue);
         });
 
-      this.fanAccesory.addService(tmpAngleButton);
       this.angleButtonsService.push(tmpAngleButton);
     });
   }
@@ -443,7 +481,8 @@ class xiaomiFanDevice {
       }
 
       this.verticalAngleButtons[i] = parsedValue;
-      let tmpAngleButton = new Service.Switch('Vertical Angle - ' + parsedValue, 'verticalAngleButtonService' + i);
+      const vAngleName = 'Vertical Angle - ' + parsedValue;
+      let tmpAngleButton = this.getOrCreateService(Service.Switch, vAngleName, 'verticalAngleButtonService' + i);
       tmpAngleButton
         .getCharacteristic(Characteristic.On)
         .onGet(() => {
@@ -453,7 +492,6 @@ class xiaomiFanDevice {
           return this.setVerticalAngleButtonState(state, parsedValue);
         });
 
-      this.fanAccesory.addService(tmpAngleButton);
       this.verticalAngleButtonsService.push(tmpAngleButton);
     });
   }
@@ -462,7 +500,8 @@ class xiaomiFanDevice {
     if (this.fanLevelControl && this.fanDevice.supportsFanLevel()) {
       this.fanLevelControlService = new Array();
       for (let i = 1; i <= this.fanDevice.numberOfFanLevels(); i++) {
-        let tmpFanLevelButton = new Service.Switch('Level ' + i, 'levelControlService' + i);
+        const levelName = 'Level ' + i;
+        let tmpFanLevelButton = this.getOrCreateService(Service.Switch, levelName, 'levelControlService' + i);
         tmpFanLevelButton
           .getCharacteristic(Characteristic.On)
           .onGet(() => {
@@ -472,7 +511,6 @@ class xiaomiFanDevice {
             return this.setFanLevelState(state, i);
           });
 
-        this.fanAccesory.addService(tmpFanLevelButton);
         this.fanLevelControlService.push(tmpFanLevelButton);
       }
     }
@@ -480,19 +518,17 @@ class xiaomiFanDevice {
 
   prepareIoniserControlService() {
     if (this.ioniserControl && this.fanDevice.supportsIoniser()) {
-      this.ioniserControlService = new Service.Switch('Ioniser', 'ioniserControlService');
+      this.ioniserControlService = this.getOrCreateService(Service.Switch, 'Ioniser', 'ioniserControlService');
       this.ioniserControlService
         .getCharacteristic(Characteristic.On)
         .onGet(this.getIoniserState.bind(this))
         .onSet(this.setIoniserState.bind(this));
-
-      this.fanAccesory.addService(this.ioniserControlService);
     }
   }
 
   prepareTemperatureService() {
     if (this.fanDevice.supportsTemperatureReporting()) {
-      this.temperatureService = new Service.TemperatureSensor('Temp', 'temperatureService');
+      this.temperatureService = this.getOrCreateService(Service.TemperatureSensor, 'Temp', 'temperatureService');
       this.temperatureService
         .setCharacteristic(Characteristic.StatusFault, Characteristic.StatusFault.NO_FAULT)
         .setCharacteristic(Characteristic.StatusTampered, Characteristic.StatusTampered.NOT_TAMPERED)
@@ -500,14 +536,12 @@ class xiaomiFanDevice {
       this.temperatureService
         .getCharacteristic(Characteristic.CurrentTemperature)
         .onGet(this.getCurrentTemperature.bind(this));
-
-      this.fanAccesory.addService(this.temperatureService);
     }
   }
 
   prepareRelativeHumidityService() {
     if (this.fanDevice.supportsRelativeHumidityReporting()) {
-      this.relativeHumidityService = new Service.HumiditySensor('Humidity', 'relativeHumidityService');
+      this.relativeHumidityService = this.getOrCreateService(Service.HumiditySensor, 'Humidity', 'relativeHumidityService');
       this.relativeHumidityService
         .setCharacteristic(Characteristic.StatusFault, Characteristic.StatusFault.NO_FAULT)
         .setCharacteristic(Characteristic.StatusTampered, Characteristic.StatusTampered.NOT_TAMPERED)
@@ -515,8 +549,6 @@ class xiaomiFanDevice {
       this.relativeHumidityService
         .getCharacteristic(Characteristic.CurrentRelativeHumidity)
         .onGet(this.getCurrentRelativeHumidity.bind(this));
-
-      this.fanAccesory.addService(this.relativeHumidityService);
     }
   }
 
@@ -524,7 +556,7 @@ class xiaomiFanDevice {
     if (this.fanDevice.hasBuiltInBattery() && this.fanDevice.supportsBatteryStateReporting()) {
       // Service.Battery is the name in HAP-nodejs 13+ (Homebridge 2.0), with BatteryService as fallback
       const BatteryServiceClass = Service.Battery || Service.BatteryService;
-      this.batteryService = new BatteryServiceClass('Battery', 'batteryService');
+      this.batteryService = this.getOrCreateService(BatteryServiceClass, 'Battery', 'batteryService');
       this.batteryService
         .setCharacteristic(Characteristic.ChargingState, Characteristic.ChargingState.NOT_CHARGING)
         .setCharacteristic(Characteristic.StatusLowBattery, Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL);
@@ -534,8 +566,6 @@ class xiaomiFanDevice {
       this.batteryService
         .getCharacteristic(Characteristic.StatusLowBattery)
         .onGet(this.getBatteryLevelStatus.bind(this));
-
-      this.fanAccesory.addService(this.batteryService);
     }
   }
 
@@ -625,22 +655,30 @@ class xiaomiFanDevice {
     }
   }
 
+  // RotationDirection은 기본적으로 부저 음량 전환 용도였으나
+  // 자연풍/일반풍(Straight wind / Natural wind) 토글로 재활용한다.
+  // - CLOCKWISE      → 자연풍 모드 ON  (Natural wind)
+  // - COUNTER_CLOCKWISE → 일반풍 모드 (Straight wind, Natural OFF)
   async getRotationDirection() {
-    let buzzerLevel = 2;
-    if (this.fanDevice && this.fanDevice.isFanConnected() && this.fanDevice.supportsBuzzerLevelControl()) {
-      buzzerLevel = this.fanDevice.getBuzzerLevel();
+    let isNaturalMode = false;
+    if (this.fanDevice && this.fanDevice.isFanConnected() && this.fanDevice.supportsNaturalMode()) {
+      isNaturalMode = this.fanDevice.isNaturalModeEnabled();
     }
-    return buzzerLevel === 1 ? Characteristic.RotationDirection.CLOCKWISE : Characteristic.RotationDirection.COUNTER_CLOCKWISE;
+    return isNaturalMode ? Characteristic.RotationDirection.CLOCKWISE : Characteristic.RotationDirection.COUNTER_CLOCKWISE;
   }
 
   async setRotationDirection(state) {
-    if (this.fanDevice && this.fanDevice.isFanConnected() && this.fanDevice.supportsBuzzerLevelControl()) {
-      if (this.fanDevice.isBuzzerEnabled() === true) {
-        let buzzerLevel = state === Characteristic.RotationDirection.CLOCKWISE ? 1 : 2;
-        this.fanDevice.setBuzzerLevel(buzzerLevel);
+    if (this.fanDevice && this.fanDevice.isFanConnected() && this.fanDevice.supportsNaturalMode()) {
+      const enableNatural = state === Characteristic.RotationDirection.CLOCKWISE;
+      this.fanDevice.setNaturalModeEnabled(enableNatural);
+
+      // 별도의 자연풍 스위치 액세서리(naturalModeControlService)가 있다면 상태 동기화
+      if (this.naturalModeControlService) {
+        this.naturalModeControlService.getCharacteristic(Characteristic.On).updateValue(enableNatural);
       }
+    } else {
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
-    // no-op for devices that do not support buzzer level control
   }
 
   async getMoveFanSwitch() {
@@ -921,8 +959,9 @@ class xiaomiFanDevice {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       if (this.fanService) this.fanService.getCharacteristic(Characteristic.Active).updateValue(this.fanDevice.isPowerOn() ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE);
       if (this.fanService && this.fanDevice.supportsFanSpeed()) this.fanService.getCharacteristic(Characteristic.RotationSpeed).updateValue(this.adjustToPercentageRange(this.fanDevice.getRotationSpeed()));
-      if (this.fanService) this.fanService.getCharacteristic(Characteristic.LockPhysicalControls).updateValue(this.fanDevice.isChildLockActive() ? Characteristic.LockPhysicalControls.CONTROL_LOCK_ENABLED : Characteristic.LockPhysicalControls.CONTROL_LOCK_DISABLED);
-      if (this.fanService && this.fanDevice.supportsBuzzerLevelControl()) this.fanService.getCharacteristic(Characteristic.RotationDirection).updateValue(this.fanDevice.getBuzzerLevel() === 1 ? Characteristic.RotationDirection.CLOCKWISE : Characteristic.RotationDirection.COUNTER_CLOCKWISE);
+      // LockPhysicalControls 동기화 제거 (fanService에서 해당 characteristic을 더 이상 추가하지 않음)
+      // RotationDirection을 자연풍 모드 상태로 동기화 (CLOCKWISE = Natural ON)
+      if (this.fanService && this.fanDevice.supportsNaturalMode()) this.fanService.getCharacteristic(Characteristic.RotationDirection).updateValue(this.fanDevice.isNaturalModeEnabled() ? Characteristic.RotationDirection.CLOCKWISE : Characteristic.RotationDirection.COUNTER_CLOCKWISE);
       if (this.buzzerService) this.buzzerService.getCharacteristic(Characteristic.On).updateValue(this.fanDevice.isBuzzerEnabled());
       if (this.ledService) this.ledService.getCharacteristic(Characteristic.On).updateValue(this.fanDevice.isLedEnabled());
       if (this.ledBrightnessService) this.ledBrightnessService.getCharacteristic(Characteristic.On).updateValue(this.fanDevice.isLedEnabled());
@@ -1093,20 +1132,17 @@ class xiaomiFanDevice {
 class xiaomiFanPlatform {
   constructor(log, config, api) {
 
-    this.fans = [];
+    this.fans = []; // 캐시된 액세서리 목록 (configureAccessory에서 채워짐)
     this.log = log;
     this.api = api;
     this.config = config;
 
     if (this.api) {
       /*
-       * When this event is fired, homebridge restored all cached accessories from disk and did call their respective
-       * `configureAccessory` method for all of them. Dynamic Platform plugins should only register new accessories
-       * after this event was fired, in order to ensure they weren't added to homebridge already.
-       * This event can also be used to start discovery of new accessories.
+       * 모든 캐시 액세서리가 configureAccessory를 통해 복원된 후 didFinishLaunching이 발생함.
+       * Dynamic Platform 플러그인은 이 이벤트 이후에 신규 액세서리를 등록해야 함.
        */
       this.api.on("didFinishLaunching", () => {
-        this.removeAccessories(); // remove all cached devices, we do not want to use cache for now, maybe in future?
         this.initDevices();
       });
     }
@@ -1114,55 +1150,73 @@ class xiaomiFanPlatform {
   }
 
   /*
-   * This function is invoked when homebridge restores cached accessories from disk at startup.
-   * It should be used to setup event handlers for characteristics and update respective values.
+   * 부팅 시 캐시된 액세서리가 있을 때 호출됨. 여기서는 단순히 목록에 보관해두고
+   * initDevices()에서 매칭되는 device 설정과 연결한다.
    */
   configureAccessory(accessory) {
-    this.log.debug("Found cached accessory %s", accessory.displayName);
+    this.log.debug("캐시된 액세서리 발견: %s", accessory.displayName);
     this.fans.push(accessory);
   }
 
   // ------------ CUSTOM METHODS ------------
 
   initDevices() {
-    this.log.info('Init - initializing devices');
+    this.log.info('Init - 디바이스 초기화 시작');
 
-    // read from config.devices
+    // config의 devices와 fans를 합쳐서 처리 (둘 다 지원)
+    const allDeviceConfigs = [];
     if (this.config.devices && Array.isArray(this.config.devices)) {
-      for (let device of this.config.devices) {
-        if (device) {
-          new xiaomiFanDevice(this.log, device, this.api);
-        }
-      }
+      allDeviceConfigs.push(...this.config.devices);
     } else if (this.config.devices) {
-      this.log.info('The devices property is not of type array. Cannot initialize. Type: %s', typeof this.config.devices);
+      this.log.info('devices 항목이 배열이 아닙니다. Type: %s', typeof this.config.devices);
     }
-
-    // also read from config.fans
     if (this.config.fans && Array.isArray(this.config.fans)) {
-      for (let fan of this.config.fans) {
-        if (fan) {
-          new xiaomiFanDevice(this.log, fan, this.api);
-        }
-      }
+      allDeviceConfigs.push(...this.config.fans);
     } else if (this.config.fans) {
-      this.log.info('The fans property is not of type array. Cannot initialize. Type: %s', typeof this.config.fans);
+      this.log.info('fans 항목이 배열이 아닙니다. Type: %s', typeof this.config.fans);
     }
 
-    if (!this.config.devices && !this.config.fans) {
+    if (allDeviceConfigs.length === 0) {
       this.log.info('-------------------------------------------');
-      this.log.info('Init - no fan configuration found');
-      this.log.info('Missing devices or fans in your platform config');
+      this.log.info('Init - 선풍기 설정을 찾지 못했습니다');
+      this.log.info('platform 설정에 devices 또는 fans 항목을 추가하세요');
       this.log.info('-------------------------------------------');
+      return;
     }
 
+    // 사용된 캐시 액세서리를 추적 (이후 미사용 액세서리는 정리)
+    const usedAccessories = new Set();
+
+    for (let deviceConfig of allDeviceConfigs) {
+      if (!deviceConfig) continue;
+      if (!deviceConfig.ip || !deviceConfig.token) continue;
+
+      // device의 UUID 생성 (xiaomiFanDevice가 사용하는 것과 동일한 방식)
+      const uuid = this.api.hap.uuid.generate(deviceConfig.token + deviceConfig.ip + PLATFORM_NAME);
+
+      // 캐시 액세서리 검색
+      const cachedAccessory = this.fans.find(a => a.UUID === uuid);
+      if (cachedAccessory) {
+        usedAccessories.add(cachedAccessory);
+      }
+
+      new xiaomiFanDevice(this.log, deviceConfig, this.api, cachedAccessory, this);
+    }
+
+    // 설정에서 제거된 디바이스의 캐시 액세서리는 정리
+    const orphanAccessories = this.fans.filter(a => !usedAccessories.has(a));
+    if (orphanAccessories.length > 0) {
+      this.log.info(`설정에 없는 캐시 액세서리 ${orphanAccessories.length}개 정리`);
+      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, orphanAccessories);
+      this.fans = this.fans.filter(a => usedAccessories.has(a));
+    }
   }
 
   removeAccessories() {
-    // we don't have any special identifiers, we just remove all our accessories
-    this.log.debug("Removing all cached accessories");
+    // 모든 캐시 액세서리 제거 (현재는 사용하지 않지만 외부에서 호출 가능성을 위해 유지)
+    this.log.debug("모든 캐시 액세서리 제거");
     this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, this.fans);
-    this.fans = []; // clear out the array
+    this.fans = [];
   }
 
   removeAccessory(accessory) {
