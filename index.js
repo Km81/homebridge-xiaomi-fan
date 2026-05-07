@@ -6,7 +6,7 @@ let Service, Characteristic, Homebridge, Accessory;
 
 const PLUGIN_NAME = 'homebridge-xiaomi-fan-km81';
 const PLATFORM_NAME = 'xiaomifan';
-const PLUGIN_VERSION = '1.2.0';
+const PLUGIN_VERSION = '1.2.1';
 
 // General constants
 const BATTERY_LOW_THRESHOLD = 20;
@@ -246,6 +246,14 @@ class xiaomiFanDevice {
 
   prepareFanService() {
     this.fanService = this.getOrCreateService(Service.Fanv2, this.name, 'fanService');
+
+    // 캐시에서 복원된 액세서리에 LockPhysicalControls 등 더 이상 사용하지 않는
+    // characteristic이 남아 있으면 명시적으로 제거 (Home 앱 UI 정리 목적)
+    if (this.fanService.testCharacteristic(Characteristic.LockPhysicalControls)) {
+      const lockChar = this.fanService.getCharacteristic(Characteristic.LockPhysicalControls);
+      this.fanService.removeCharacteristic(lockChar);
+      this.logDebug('레거시 LockPhysicalControls characteristic 제거됨');
+    }
 
     // 핸들러 바인딩 (매번 다시 설정해도 .onGet/.onSet은 덮어쓰므로 안전)
     this.fanService

@@ -1,6 +1,6 @@
 {
   "name": "homebridge-xiaomi-fan-km81",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Xiaomi Smartmi/Mija 선풍기를 위한 Homebridge 플러그인 (Homebridge 2.0 호환). merdok/homebridge-xiaomi-fan의 fork입니다.",
   "main": "index.js",
   "engines": {
