@@ -1,7 +1,7 @@
 {
   "name": "homebridge-xiaomi-fan-km81",
   "version": "2.0.0",
-  "description": "Homebridge plugin for Xiaomi Smartmi Fans (Homebridge 2.0 compatible)",
+  "description": "Homebridge plugin for Xiaomi Smartmi Fans (Homebridge 2.0 compatible) - fork of merdok/homebridge-xiaomi-fan",
   "main": "index.js",
   "engines": {
     "node": ">=18.15.0",
@@ -18,21 +18,17 @@
     "dmaker",
     "homekit"
   ],
-  "author": "merdok",
-  "funding": {
-    "type" : "paypal",
-    "url" : "https://paypal.me/merdokdev"
-  },
+  "author": "Km81",
   "license": "MIT",
   "dependencies": {
     "miio": "^0.15.6"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/merdok/homebridge-xiaomi-fan.git"
+    "url": "git+https://github.com/Km81/homebridge-xiaomi-fan-km81.git"
   },
   "bugs": {
-    "url": "https://github.com/merdok/homebridge-xiaomi-fan/issues"
+    "url": "https://github.com/Km81/homebridge-xiaomi-fan-km81/issues"
   },
-  "homepage": "https://github.com/merdok/homebridge-xiaomi-fan#readme"
+  "homepage": "https://github.com/Km81/homebridge-xiaomi-fan-km81#readme"
 }
