@@ -1,5 +1,4 @@
 const fs = require('fs');
-const mkdirp = require('mkdirp');
 const FanController = require('./lib/FanController.js');
 const Events = require('./lib/Events.js');
 
@@ -7,7 +6,7 @@ let Service, Characteristic, Homebridge, Accessory;
 
 const PLUGIN_NAME = 'homebridge-xiaomi-fan';
 const PLATFORM_NAME = 'xiaomifan';
-const PLUGIN_VERSION = '1.5.9';
+const PLUGIN_VERSION = '2.0.0';
 
 // General constants
 const BATTERY_LOW_THRESHOLD = 20;
@@ -18,7 +17,7 @@ module.exports = function(homebridge) {
   Characteristic = homebridge.hap.Characteristic;
   Homebridge = homebridge;
   Accessory = homebridge.platformAccessory;
-  homebridge.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, xiaomiFanPlatform, true);
+  homebridge.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, xiaomiFanPlatform);
 };
 
 class xiaomiFanDevice {
@@ -96,7 +95,7 @@ class xiaomiFanDevice {
 
     // check if the fan preferences directory exists, if not then create it
     if (fs.existsSync(this.prefsDir) === false) {
-      mkdirp(this.prefsDir);
+      fs.mkdirSync(this.prefsDir, { recursive: true });
     }
 
     // create fan model info file name
@@ -157,7 +156,7 @@ class xiaomiFanDevice {
     this.UUID = Homebridge.hap.uuid.generate(this.token + this.ip + PLATFORM_NAME);
 
     // prepare the fan accessory
-    this.fanAccesory = new Accessory(this.name, this.UUID, Homebridge.hap.Accessory.Categories.FAN);
+    this.fanAccesory = new Accessory(this.name, this.UUID, Homebridge.hap.Categories.FAN);
 
     // prepare accessory services
     if (this.fanDevice) {
@@ -212,29 +211,29 @@ class xiaomiFanDevice {
     this.fanService = new Service.Fanv2(this.name, 'fanService');
     this.fanService
       .getCharacteristic(Characteristic.Active)
-      .on('get', this.getPowerState.bind(this))
-      .on('set', this.setPowerState.bind(this));
+      .onGet(this.getPowerState.bind(this))
+      .onSet(this.setPowerState.bind(this));
     this.fanService
-      .addCharacteristic(Characteristic.CurrentFanState) // for what is this used?
-      .on('get', this.getFanState.bind(this));
+      .addCharacteristic(Characteristic.CurrentFanState)
+      .onGet(this.getFanState.bind(this));
     if (this.fanDevice.supportsFanSpeed()) {
       this.fanService
         .addCharacteristic(Characteristic.RotationSpeed)
-        .on('get', this.getRotationSpeed.bind(this))
-        .on('set', this.setRotationSpeed.bind(this));
+        .onGet(this.getRotationSpeed.bind(this))
+        .onSet(this.setRotationSpeed.bind(this));
     }
     this.fanService
       .addCharacteristic(Characteristic.LockPhysicalControls)
-      .on('get', this.getLockPhysicalControls.bind(this))
-      .on('set', this.setLockPhysicalControls.bind(this));
+      .onGet(this.getLockPhysicalControls.bind(this))
+      .onSet(this.setLockPhysicalControls.bind(this));
     this.fanService
       .addCharacteristic(Characteristic.SwingMode)
-      .on('get', this.getSwingMode.bind(this))
-      .on('set', this.setSwingMode.bind(this));
+      .onGet(this.getSwingMode.bind(this))
+      .onSet(this.setSwingMode.bind(this));
     this.fanService
       .addCharacteristic(Characteristic.RotationDirection) // used to switch between buzzer levels on supported devices
-      .on('get', this.getRotationDirection.bind(this))
-      .on('set', this.setRotationDirection.bind(this));
+      .onGet(this.getRotationDirection.bind(this))
+      .onSet(this.setRotationDirection.bind(this));
 
     this.fanAccesory.addService(this.fanService);
   }
@@ -244,9 +243,9 @@ class xiaomiFanDevice {
       this.moveLeftService = new Service.Switch('Move left', 'moveLeftService');
       this.moveLeftService
         .getCharacteristic(Characteristic.On)
-        .on('get', this.getMoveFanSwitch.bind(this))
-        .on('set', (state, callback) => {
-          this.setMoveFanSwitch(state, callback, 'left');
+        .onGet(this.getMoveFanSwitch.bind(this))
+        .onSet((state) => {
+          return this.setMoveFanSwitch(state, 'left');
         });
 
       this.fanAccesory.addService(this.moveLeftService);
@@ -254,9 +253,9 @@ class xiaomiFanDevice {
       this.moveRightService = new Service.Switch('Move right', 'moveRightService');
       this.moveRightService
         .getCharacteristic(Characteristic.On)
-        .on('get', this.getMoveFanSwitch.bind(this))
-        .on('set', (state, callback) => {
-          this.setMoveFanSwitch(state, callback, 'right');
+        .onGet(this.getMoveFanSwitch.bind(this))
+        .onSet((state) => {
+          return this.setMoveFanSwitch(state, 'right');
         });
 
       this.fanAccesory.addService(this.moveRightService);
@@ -266,9 +265,9 @@ class xiaomiFanDevice {
       this.moveUpService = new Service.Switch('Move Up', 'moveUpService');
       this.moveUpService
         .getCharacteristic(Characteristic.On)
-        .on('get', this.getMoveFanSwitch.bind(this))
-        .on('set', (state, callback) => {
-          this.setMoveFanSwitch(state, callback, 'up');
+        .onGet(this.getMoveFanSwitch.bind(this))
+        .onSet((state) => {
+          return this.setMoveFanSwitch(state, 'up');
         });
 
       this.fanAccesory.addService(this.moveUpService);
@@ -276,9 +275,9 @@ class xiaomiFanDevice {
       this.moveDownService = new Service.Switch('Move down', 'moveDownService');
       this.moveDownService
         .getCharacteristic(Characteristic.On)
-        .on('get', this.getMoveFanSwitch.bind(this))
-        .on('set', (state, callback) => {
-          this.setMoveFanSwitch(state, callback, 'down');
+        .onGet(this.getMoveFanSwitch.bind(this))
+        .onSet((state) => {
+          return this.setMoveFanSwitch(state, 'down');
         });
 
       this.fanAccesory.addService(this.moveDownService);
@@ -290,8 +289,8 @@ class xiaomiFanDevice {
       this.buzzerService = new Service.Switch('Buzzer', 'buzzerService');
       this.buzzerService
         .getCharacteristic(Characteristic.On)
-        .on('get', this.getBuzzer.bind(this))
-        .on('set', this.setBuzzer.bind(this));
+        .onGet(this.getBuzzer.bind(this))
+        .onSet(this.setBuzzer.bind(this));
 
       this.fanAccesory.addService(this.buzzerService);
     }
@@ -304,12 +303,12 @@ class xiaomiFanDevice {
         this.ledBrightnessService = new Service.Lightbulb('LED', 'ledBrightnessService');
         this.ledBrightnessService
           .getCharacteristic(Characteristic.On)
-          .on('get', this.getLed.bind(this))
-          .on('set', this.setLed.bind(this));
+          .onGet(this.getLed.bind(this))
+          .onSet(this.setLed.bind(this));
         this.ledBrightnessService
-          .addCharacteristic(new Characteristic.Brightness())
-          .on('get', this.getLedBrightness.bind(this))
-          .on('set', this.setLedBrightness.bind(this));
+          .addCharacteristic(Characteristic.Brightness)
+          .onGet(this.getLedBrightness.bind(this))
+          .onSet(this.setLedBrightness.bind(this));
 
         this.fanAccesory.addService(this.ledBrightnessService);
       } else if (this.fanDevice.supportsLedControl()) {
@@ -317,8 +316,8 @@ class xiaomiFanDevice {
         this.ledService = new Service.Switch('LED', 'ledService');
         this.ledService
           .getCharacteristic(Characteristic.On)
-          .on('get', this.getLed.bind(this))
-          .on('set', this.setLed.bind(this));
+          .onGet(this.getLed.bind(this))
+          .onSet(this.setLed.bind(this));
 
         this.fanAccesory.addService(this.ledService);
       }
@@ -330,8 +329,8 @@ class xiaomiFanDevice {
       this.naturalModeControlService = new Service.Switch('Natural mode', 'naturalModeControlService');
       this.naturalModeControlService
         .getCharacteristic(Characteristic.On)
-        .on('get', this.getNaturalMode.bind(this))
-        .on('set', this.setNaturalMode.bind(this));
+        .onGet(this.getNaturalMode.bind(this))
+        .onSet(this.setNaturalMode.bind(this));
 
       this.fanAccesory.addService(this.naturalModeControlService);
     }
@@ -342,8 +341,8 @@ class xiaomiFanDevice {
       this.sleepModeControlService = new Service.Switch('Sleep mode', 'sleepModeControlService');
       this.sleepModeControlService
         .getCharacteristic(Characteristic.On)
-        .on('get', this.getSleepMode.bind(this))
-        .on('set', this.setSleepMode.bind(this));
+        .onGet(this.getSleepMode.bind(this))
+        .onSet(this.setSleepMode.bind(this));
 
       this.fanAccesory.addService(this.sleepModeControlService);
     }
@@ -354,12 +353,12 @@ class xiaomiFanDevice {
       this.shutdownTimerService = new Service.Lightbulb('Shutdown timer', 'shutdownTimerService');
       this.shutdownTimerService
         .getCharacteristic(Characteristic.On)
-        .on('get', this.getShutdownTimerEnabled.bind(this))
-        .on('set', this.setShutdownTimerEnabled.bind(this));
+        .onGet(this.getShutdownTimerEnabled.bind(this))
+        .onSet(this.setShutdownTimerEnabled.bind(this));
       this.shutdownTimerService
-        .addCharacteristic(new Characteristic.Brightness())
-        .on('get', this.getShutdownTimer.bind(this))
-        .on('set', this.setShutdownTimer.bind(this));
+        .addCharacteristic(Characteristic.Brightness)
+        .onGet(this.getShutdownTimer.bind(this))
+        .onSet(this.setShutdownTimer.bind(this));
 
       this.fanAccesory.addService(this.shutdownTimerService);
     }
@@ -376,7 +375,7 @@ class xiaomiFanDevice {
 
     if (this.angleButtons === undefined || this.angleButtons === null) {
       if (this.fanDevice.supportsOscillationLevels()) {
-        // if the fan supports osicllation levels, and user did not specify the property then show all oscillation levels
+        // if the fan supports oscillation levels, and user did not specify the property then show all oscillation levels
         this.angleButtons = this.fanDevice.oscillationLevels();
       } else {
         return;
@@ -400,11 +399,11 @@ class xiaomiFanDevice {
       let tmpAngleButton = new Service.Switch('Angle - ' + parsedValue, 'angleButtonService' + i);
       tmpAngleButton
         .getCharacteristic(Characteristic.On)
-        .on('get', (callback) => {
-          this.getAngleButtonState(callback, parsedValue);
+        .onGet(() => {
+          return this.getAngleButtonState(parsedValue);
         })
-        .on('set', (state, callback) => {
-          this.setAngleButtonState(state, callback, parsedValue);
+        .onSet((state) => {
+          return this.setAngleButtonState(state, parsedValue);
         });
 
       this.fanAccesory.addService(tmpAngleButton);
@@ -447,11 +446,11 @@ class xiaomiFanDevice {
       let tmpAngleButton = new Service.Switch('Vertical Angle - ' + parsedValue, 'verticalAngleButtonService' + i);
       tmpAngleButton
         .getCharacteristic(Characteristic.On)
-        .on('get', (callback) => {
-          this.getVerticalAngleButtonState(callback, parsedValue);
+        .onGet(() => {
+          return this.getVerticalAngleButtonState(parsedValue);
         })
-        .on('set', (state, callback) => {
-          this.setVerticalAngleButtonState(state, callback, parsedValue);
+        .onSet((state) => {
+          return this.setVerticalAngleButtonState(state, parsedValue);
         });
 
       this.fanAccesory.addService(tmpAngleButton);
@@ -466,11 +465,11 @@ class xiaomiFanDevice {
         let tmpFanLevelButton = new Service.Switch('Level ' + i, 'levelControlService' + i);
         tmpFanLevelButton
           .getCharacteristic(Characteristic.On)
-          .on('get', (callback) => {
-            this.getFanLevelState(callback, i);
+          .onGet(() => {
+            return this.getFanLevelState(i);
           })
-          .on('set', (state, callback) => {
-            this.setFanLevelState(state, callback, i);
+          .onSet((state) => {
+            return this.setFanLevelState(state, i);
           });
 
         this.fanAccesory.addService(tmpFanLevelButton);
@@ -484,8 +483,8 @@ class xiaomiFanDevice {
       this.ioniserControlService = new Service.Switch('Ioniser', 'ioniserControlService');
       this.ioniserControlService
         .getCharacteristic(Characteristic.On)
-        .on('get', this.getIoniserState.bind(this))
-        .on('set', this.setIoniserState.bind(this));
+        .onGet(this.getIoniserState.bind(this))
+        .onSet(this.setIoniserState.bind(this));
 
       this.fanAccesory.addService(this.ioniserControlService);
     }
@@ -500,7 +499,7 @@ class xiaomiFanDevice {
         .setCharacteristic(Characteristic.StatusLowBattery, Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL);
       this.temperatureService
         .getCharacteristic(Characteristic.CurrentTemperature)
-        .on('get', this.getCurrentTemperature.bind(this));
+        .onGet(this.getCurrentTemperature.bind(this));
 
       this.fanAccesory.addService(this.temperatureService);
     }
@@ -515,7 +514,7 @@ class xiaomiFanDevice {
         .setCharacteristic(Characteristic.StatusLowBattery, Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL);
       this.relativeHumidityService
         .getCharacteristic(Characteristic.CurrentRelativeHumidity)
-        .on('get', this.getCurrentRelativeHumidity.bind(this));
+        .onGet(this.getCurrentRelativeHumidity.bind(this));
 
       this.fanAccesory.addService(this.relativeHumidityService);
     }
@@ -523,16 +522,18 @@ class xiaomiFanDevice {
 
   prepareBatteryService() {
     if (this.fanDevice.hasBuiltInBattery() && this.fanDevice.supportsBatteryStateReporting()) {
-      this.batteryService = new Service.BatteryService('Battery', 'batteryService');
+      // Service.Battery is the name in HAP-nodejs 13+ (Homebridge 2.0), with BatteryService as fallback
+      const BatteryServiceClass = Service.Battery || Service.BatteryService;
+      this.batteryService = new BatteryServiceClass('Battery', 'batteryService');
       this.batteryService
         .setCharacteristic(Characteristic.ChargingState, Characteristic.ChargingState.NOT_CHARGING)
         .setCharacteristic(Characteristic.StatusLowBattery, Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL);
       this.batteryService
         .getCharacteristic(Characteristic.BatteryLevel)
-        .on('get', this.getBatteryLevel.bind(this));
+        .onGet(this.getBatteryLevel.bind(this));
       this.batteryService
         .getCharacteristic(Characteristic.StatusLowBattery)
-        .on('get', this.getBatteryLevelStatus.bind(this));
+        .onGet(this.getBatteryLevelStatus.bind(this));
 
       this.fanAccesory.addService(this.batteryService);
     }
@@ -541,119 +542,112 @@ class xiaomiFanDevice {
 
   /*----------========== HOMEBRIDGE STATE SETTERS/GETTERS ==========----------*/
 
-  getPowerState(callback) {
+  async getPowerState() {
     let isFanOn = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       isFanOn = this.fanDevice.isPowerOn();
     }
-    callback(null, isFanOn ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE);
+    return isFanOn ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE;
   }
 
-  setPowerState(state, callback) {
+  async setPowerState(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       let isPowerOn = state === Characteristic.Active.ACTIVE;
       // only fire the setPowerOn method when we want to turn off the fan or the fan is off
-      // the rotaion speed slider fires this method many times even when the fan is already on so i need to limit that
+      // the rotation speed slider fires this method many times even when the fan is already on so i need to limit that
       if (isPowerOn === false || this.fanDevice.isPowerOn() === false) {
         this.fanDevice.setPowerOn(isPowerOn);
       }
-      callback();
     } else {
-      callback(this.createError(`cannot set power state`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getFanState(callback) {
+  async getFanState() {
     let fanState = Characteristic.CurrentFanState.INACTIVE;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
-      fanState = this.fanDevice.isPowerOn() ? Characteristic.CurrentFanState.BLOWING_AIR : Characteristic.CurrentFanState.IDLE
+      fanState = this.fanDevice.isPowerOn() ? Characteristic.CurrentFanState.BLOWING_AIR : Characteristic.CurrentFanState.IDLE;
     }
-    callback(null, fanState);
+    return fanState;
   }
 
-  getRotationSpeed(callback) {
+  async getRotationSpeed() {
     let fanRotationSpeed = 0;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       fanRotationSpeed = this.fanDevice.getRotationSpeed();
       fanRotationSpeed = this.adjustToPercentageRange(fanRotationSpeed);
     }
-    callback(null, fanRotationSpeed);
+    return fanRotationSpeed;
   }
 
-  setRotationSpeed(value, callback) {
+  async setRotationSpeed(value) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       // use debounce to limit the number of calls when the user slides the rotation slider
       if (this.rotationSpeedTimeout) clearTimeout(this.rotationSpeedTimeout);
       this.rotationSpeedTimeout = setTimeout(() => this.fanDevice.setRotationSpeed(value), 500);
-      callback();
     } else {
-      callback(this.createError(`cannot set rotation speed`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getLockPhysicalControls(callback) {
+  async getLockPhysicalControls() {
     let isChildLockActive = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       isChildLockActive = this.fanDevice.isChildLockActive();
     }
-    callback(null, isChildLockActive ? Characteristic.LockPhysicalControls.CONTROL_LOCK_ENABLED : Characteristic.LockPhysicalControls.CONTROL_LOCK_DISABLED);
+    return isChildLockActive ? Characteristic.LockPhysicalControls.CONTROL_LOCK_ENABLED : Characteristic.LockPhysicalControls.CONTROL_LOCK_DISABLED;
   }
 
-  setLockPhysicalControls(state, callback) {
+  async setLockPhysicalControls(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       let isChildLockActive = state === Characteristic.LockPhysicalControls.CONTROL_LOCK_ENABLED;
       this.fanDevice.setChildLock(isChildLockActive);
-      callback();
     } else {
-      callback(this.createError(`cannot set child lock state`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getSwingMode(callback) {
+  async getSwingMode() {
     let isSwingModeActive = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       isSwingModeActive = this.fanDevice.isSwingModeEnabled();
     }
-    callback(null, isSwingModeActive ? Characteristic.SwingMode.SWING_ENABLED : Characteristic.SwingMode.SWING_DISABLED);
+    return isSwingModeActive ? Characteristic.SwingMode.SWING_ENABLED : Characteristic.SwingMode.SWING_DISABLED;
   }
 
-  setSwingMode(state, callback) {
+  async setSwingMode(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       let isSwingModeActive = state === Characteristic.SwingMode.SWING_ENABLED;
       this.fanDevice.setSwingModeEnabled(isSwingModeActive);
-      this.updateAngleButtonsAndSwingMode(null, isSwingModeActive); // update the angel buttons if enabled
-      callback();
+      this.updateAngleButtonsAndSwingMode(null, isSwingModeActive); // update the angle buttons if enabled
     } else {
-      callback(this.createError(`cannot set swing mode state`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getRotationDirection(callback) {
+  async getRotationDirection() {
     let buzzerLevel = 2;
     if (this.fanDevice && this.fanDevice.isFanConnected() && this.fanDevice.supportsBuzzerLevelControl()) {
       buzzerLevel = this.fanDevice.getBuzzerLevel();
     }
-    callback(null, buzzerLevel === 1 ? Characteristic.RotationDirection.CLOCKWISE : Characteristic.RotationDirection.COUNTER_CLOCKWISE);
+    return buzzerLevel === 1 ? Characteristic.RotationDirection.CLOCKWISE : Characteristic.RotationDirection.COUNTER_CLOCKWISE;
   }
 
-  setRotationDirection(state, callback) {
+  async setRotationDirection(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected() && this.fanDevice.supportsBuzzerLevelControl()) {
       if (this.fanDevice.isBuzzerEnabled() === true) {
         let buzzerLevel = state === Characteristic.RotationDirection.CLOCKWISE ? 1 : 2;
         this.fanDevice.setBuzzerLevel(buzzerLevel);
       }
-      callback();
-    } else {
-      // throw no error on devices which does not support the buzzer control, simply do nothing
-    //  callback(this.createError(`cannot set buzzer level`));
     }
+    // no-op for devices that do not support buzzer level control
   }
 
-  getMoveFanSwitch(callback) {
-    callback(null, false);
+  async getMoveFanSwitch() {
+    return false;
   }
 
-  setMoveFanSwitch(state, callback, direction) {
+  async setMoveFanSwitch(state, direction) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       if (direction === 'left') {
         this.fanDevice.moveLeft();
@@ -670,148 +664,140 @@ class xiaomiFanDevice {
         if (this.moveUpService) this.moveUpService.getCharacteristic(Characteristic.On).updateValue(false);
         if (this.moveDownService) this.moveDownService.getCharacteristic(Characteristic.On).updateValue(false);
       }, BUTTON_RESET_TIMEOUT);
-      callback();
     } else {
-      callback(this.createError(`cannot move fan`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getBuzzer(callback) {
+  async getBuzzer() {
     let isBuzzerEnabled = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       isBuzzerEnabled = this.fanDevice.isBuzzerEnabled();
     }
-    callback(null, isBuzzerEnabled);
+    return isBuzzerEnabled;
   }
 
-  setBuzzer(state, callback) {
+  async setBuzzer(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       this.fanDevice.setBuzzerEnabled(state);
-      callback();
     } else {
-      callback(this.createError(`cannot set buzzer state`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getLed(callback) {
+  async getLed() {
     let isLedEnabled = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       isLedEnabled = this.fanDevice.isLedEnabled();
     }
-    callback(null, isLedEnabled);
+    return isLedEnabled;
   }
 
-  setLed(state, callback) {
+  async setLed(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       if (state === false || this.fanDevice.isLedEnabled() === false) {
         this.fanDevice.setLedEnabled(state);
       }
-      callback();
     } else {
-      callback(this.createError(`cannot set LED state`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getLedBrightness(callback) {
+  async getLedBrightness() {
     let ledBrightness = 0;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       ledBrightness = this.fanDevice.getLedBrightness();
       ledBrightness = this.adjustToPercentageRange(ledBrightness);
     }
-    callback(null, ledBrightness);
+    return ledBrightness;
   }
 
-  setLedBrightness(value, callback) {
+  async setLedBrightness(value) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       this.fanDevice.setLedBrightness(value);
-      callback();
     } else {
-      callback(this.createError(`cannot set LED brightness`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getNaturalMode(callback) {
+  async getNaturalMode() {
     let naturalModeButtonEnabled = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       naturalModeButtonEnabled = this.fanDevice.isNaturalModeEnabled();
     }
-    callback(null, naturalModeButtonEnabled);
+    return naturalModeButtonEnabled;
   }
 
-  setNaturalMode(state, callback) {
+  async setNaturalMode(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       this.fanDevice.setNaturalModeEnabled(state);
-      callback();
     } else {
-      callback(this.createError(`cannot set natural mode state`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getSleepMode(callback) {
+  async getSleepMode() {
     let sleepModeButtonEnabled = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       sleepModeButtonEnabled = this.fanDevice.isSleepModeEnabled();
     }
-    callback(null, sleepModeButtonEnabled);
+    return sleepModeButtonEnabled;
   }
 
-  setSleepMode(state, callback) {
+  async setSleepMode(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       this.fanDevice.setSleepModeEnabled(state);
-      callback();
     } else {
-      callback(this.createError(`cannot set sleep mode state`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getShutdownTimerEnabled(callback) {
+  async getShutdownTimerEnabled() {
     let isShutdownTimerEnabled = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       isShutdownTimerEnabled = this.fanDevice.isShutdownTimerEnabled();
     }
-    callback(null, isShutdownTimerEnabled);
+    return isShutdownTimerEnabled;
   }
 
-  setShutdownTimerEnabled(state, callback) {
+  async setShutdownTimerEnabled(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       if (state === false) { // only if disabling, enabling will automatically set it to 100%
         this.fanDevice.setShutdownTimer(0);
       }
-      callback();
     } else {
-      callback(this.createError(`cannot set shutdown timer state`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getShutdownTimer(callback) {
+  async getShutdownTimer() {
     let shutdownTimerTime = 0;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       shutdownTimerTime = this.fanDevice.getShutdownTimer();
       shutdownTimerTime = this.adjustToPercentageRange(shutdownTimerTime);
     }
-    callback(null, shutdownTimerTime);
+    return shutdownTimerTime;
   }
 
-  setShutdownTimer(level, callback) {
+  async setShutdownTimer(level) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       this.fanDevice.setShutdownTimer(level);
-      callback();
     } else {
-      callback(this.createError(`cannot set shutdown timer time`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getAngleButtonState(callback, angle) {
+  async getAngleButtonState(angle) {
     let angleButtonEnabled = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       if (this.fanDevice.isPowerOn() && this.fanDevice.isSwingModeEnabled()) {
         angleButtonEnabled = this.fanDevice.getAngle() === angle;
       }
     }
-    callback(null, angleButtonEnabled);
+    return angleButtonEnabled;
   }
 
-  setAngleButtonState(state, callback, angle) {
+  async setAngleButtonState(state, angle) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       if (state) {
         // if swing mode disabled then turn it on
@@ -823,23 +809,22 @@ class xiaomiFanDevice {
         this.fanDevice.setSwingModeEnabled(false);
       }
       this.updateAngleButtonsAndSwingMode(angle, state);
-      callback();
     } else {
-      callback(this.createError(`cannot set swing angle`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getVerticalAngleButtonState(callback, angle) {
+  async getVerticalAngleButtonState(angle) {
     let verticalAngleButtonEnabled = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       if (this.fanDevice.isPowerOn() && this.fanDevice.isVerticalSwingModeEnabled()) {
         verticalAngleButtonEnabled = this.fanDevice.getVerticalAngle() === angle;
       }
     }
-    callback(null, verticalAngleButtonEnabled);
+    return verticalAngleButtonEnabled;
   }
 
-  setVerticalAngleButtonState(state, callback, angle) {
+  async setVerticalAngleButtonState(state, angle) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       if (state) {
         // if vertical swing mode disabled then turn it on
@@ -851,21 +836,20 @@ class xiaomiFanDevice {
         this.fanDevice.setVerticalSwingModeEnabled(false);
       }
       this.updateVerticalAngleButtonsAndSwingMode(angle, state);
-      callback();
     } else {
-      callback(this.createError(`cannot set vertical swing angle`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getFanLevelState(callback, level) {
+  async getFanLevelState(level) {
     let levelButtonEnabled = false;
     if (this.fanDevice && this.fanDevice.isFanConnected() && this.fanDevice.isPowerOn()) {
       levelButtonEnabled = this.fanDevice.getFanLevel() === level;
     }
-    callback(null, levelButtonEnabled);
+    return levelButtonEnabled;
   }
 
-  setFanLevelState(state, callback, level) {
+  async setFanLevelState(state, level) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       if (state) {
         // if fan turned off then turn it on
@@ -877,59 +861,57 @@ class xiaomiFanDevice {
       setTimeout(() => {
         this.updateFanLevelButtons();
       }, BUTTON_RESET_TIMEOUT);
-      callback();
     } else {
-      callback(this.createError(`cannot set fan level`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getIoniserState(callback) {
+  async getIoniserState() {
     let ioniserButtonEnabled = false;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       ioniserButtonEnabled = this.fanDevice.isIoniserEnabled();
     }
-    callback(null, ioniserButtonEnabled);
+    return ioniserButtonEnabled;
   }
 
-  setIoniserState(state, callback) {
+  async setIoniserState(state) {
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       this.fanDevice.setIoniserEnabled(state);
-      callback();
     } else {
-      callback(this.createError(`cannot set ioniser state`));
+      throw new this.api.hap.HapStatusError(this.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     }
   }
 
-  getCurrentTemperature(callback) {
+  async getCurrentTemperature() {
     let temp = 0;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       temp = this.fanDevice.getTemperature();
     }
-    callback(null, temp);
+    return temp;
   }
 
-  getCurrentRelativeHumidity(callback) {
+  async getCurrentRelativeHumidity() {
     let relHumidity = 0;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       relHumidity = this.fanDevice.getRelativeHumidity();
     }
-    callback(null, relHumidity);
+    return relHumidity;
   }
 
-  getBatteryLevel(callback) {
+  async getBatteryLevel() {
     let batteryLevel = 0;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       batteryLevel = this.fanDevice.getBatteryLevel();
     }
-    callback(null, batteryLevel);
+    return batteryLevel;
   }
 
-  getBatteryLevelStatus(callback) {
+  async getBatteryLevelStatus() {
     let batteryLevelStatus = Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL;
     if (this.fanDevice && this.fanDevice.isFanConnected()) {
       batteryLevelStatus = this.fanDevice.getBatteryLevel() <= BATTERY_LOW_THRESHOLD ? Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW : Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL;
     }
-    callback(null, batteryLevelStatus);
+    return batteryLevelStatus;
   }
 
 
@@ -1018,10 +1000,6 @@ class xiaomiFanDevice {
     }
   }
 
-  createError(msg) {
-    return new Error(`[${this.name}] Fan is not connected, ` + msg);
-  }
-
   saveFanInfo() {
     // save model name and deviceId
     if (this.fanDevice) {
@@ -1047,13 +1025,13 @@ class xiaomiFanDevice {
 
   checkAngleButtonValue(angleValue) {
     if (this.fanDevice.supportsOscillationAngle()) {
-      // if specified angle not within range then show a a warning and stop processing this value
+      // if specified angle not within range then show a warning and stop processing this value
       if (this.fanDevice.checkOscillationAngleWithinRange(angleValue) === false) {
         this.logWarn(`Specified angle ${angleValue} is not within the supported range ${JSON.stringify(this.fanDevice.oscillationAngleRange())}. Not adding angle button!`);
         return false;
       }
     } else if (this.fanDevice.supportsOscillationLevels()) {
-      // if the fan uses predefined osiscllation levels then check if the specified angle is on the list
+      // if the fan uses predefined oscillation levels then check if the specified angle is on the list
       if (this.fanDevice.checkOscillationLevelSupported(angleValue) === false) {
         this.logWarn(`Specified angle ${angleValue} is not within the supported angle levels of your fan. Allowed values: ${JSON.stringify(this.fanDevice.oscillationLevels())}. Not adding angle button!`);
         return false;
@@ -1065,7 +1043,7 @@ class xiaomiFanDevice {
 
   checkVerticalAngleButtonValue(angleValue) {
     if (this.fanDevice.supportsVerticalOscillationAngle()) {
-      // if specified angle not within range then show a a warning and stop processing this value
+      // if specified angle not within range then show a warning and stop processing this value
       if (this.fanDevice.checkVerticalOscillationAngleWithinRange(angleValue) === false) {
         this.logWarn(`Specified vertical angle ${angleValue} is not within the supported vertical range ${JSON.stringify(this.fanDevice.oscillationVerticalAngleRange())}. Not adding vertical angle button!`);
         return false;
@@ -1082,7 +1060,7 @@ class xiaomiFanDevice {
   }
 
   adjustToPercentageRange(value) {
-    // make sure a percentage value is a number and withinh 0-100
+    // make sure a percentage value is a number and within 0-100
     let newValue = value;
     if (!Number.isFinite(newValue)) newValue = 0;
     if (newValue > 100) newValue = 100;
