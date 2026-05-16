@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-05-16
+### Fixed
+- 구형 Smartmi 선풍기(zhimi.fan.v2/v3/sa1/za1/za3)의 자연풍 모드 속도 제어 수정.
+  za4와 달리 이들 모델의 펌웨어는 자연풍 시 임의의 1~100 퍼센트 값을 4단계로
+  알아서 매핑해 주지 않아, 홈킷 슬라이더를 움직여도 set_natural_level 명령이
+  무시되어 속도가 변하지 않던 문제. 이제 자연풍에서는 슬라이더 값을 25/50/75/100
+  의 4단계 이산값으로 스냅한 뒤 전송하도록 변경. 일반풍(set_speed_level) 동작은
+  영향 없음.
+
 ## [1.5.9] - 2022-06-01
 ### Added
 - Added support for dmaker.fan.p220 (Mijia DC Inverter Circulating Floor Fan) fan
