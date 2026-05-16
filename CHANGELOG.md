@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   무시되어 속도가 변하지 않던 문제. 이제 자연풍에서는 슬라이더 값을 25/50/75/100
   의 4단계 이산값으로 스냅한 뒤 전송하도록 변경. 일반풍(set_speed_level) 동작은
   영향 없음.
+- Smartmi miio 선풍기에서 홈킷으로 ON 했을 때 아이콘이 잠깐 OFF로 깜빡였다가
+  ON으로 복귀하던 현상 완화. set_power 직후 miio 라이브러리의 refresh 폴링이
+  200ms 만에 일어나는데, 일부 펌웨어는 그 시점에 아직 power 속성이 새 값으로
+  전이되지 않아 일시적으로 옛 상태('off')로 답하면서 발생하던 깜빡임. 해당
+  refreshDelay 를 1000ms 로 늘려 펌웨어가 안정적으로 새 상태를 보고하도록 함.
 
 ## [1.5.9] - 2022-06-01
 ### Added
